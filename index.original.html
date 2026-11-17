@@ -1,0 +1,1561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>深夜雨夜漂流咖啡馆 · Midnight Rain & Paper Planes</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Noto+Serif+SC:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --amber-glow: rgba(251, 191, 36, 0.25);
+      --glass-bg: rgba(18, 20, 29, 0.62);
+      --glass-border: rgba(255, 255, 255, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #0b0d14;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: #f3f4f6;
+    }
+
+    .font-serif-sc {
+      font-family: 'Noto Serif SC', serif;
+    }
+
+    /* 全屏 Canvas */
+    #sceneCanvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 1;
+    }
+
+    /* 毛玻璃质感面板 */
+    .glass-panel {
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    /* 自定义滑块样式 */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(255, 255, 255, 0.15);
+      height: 4px;
+      border-radius: 999px;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #fbbf24;
+      cursor: pointer;
+      box-shadow: 0 0 10px rgba(251, 191, 36, 0.8);
+      transition: transform 0.15s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.25);
+    }
+
+    /* 音频均衡器动画 */
+    @keyframes eqBar {
+      0%, 100% { height: 4px; }
+      50% { height: 14px; }
+    }
+    .eq-playing .eq-bar:nth-child(1) { animation: eqBar 0.8s ease-in-out infinite; }
+    .eq-playing .eq-bar:nth-child(2) { animation: eqBar 0.6s ease-in-out infinite 0.2s; }
+    .eq-playing .eq-bar:nth-child(3) { animation: eqBar 0.9s ease-in-out infinite 0.4s; }
+    .eq-playing .eq-bar:nth-child(4) { animation: eqBar 0.7s ease-in-out infinite 0.1s; }
+
+    /* 咖啡热气上升动画 */
+    @keyframes steamRise {
+      0% { transform: translateY(0) scaleX(1); opacity: 0; }
+      30% { opacity: 0.45; }
+      70% { opacity: 0.25; }
+      100% { transform: translateY(-38px) scaleX(1.35); opacity: 0; }
+    }
+    .steam-path {
+      animation: steamRise 4s ease-in-out infinite;
+    }
+    .steam-path:nth-child(2) { animation-delay: 1.3s; }
+    .steam-path:nth-child(3) { animation-delay: 2.6s; }
+
+    /* 纸飞机层 & 光标层 */
+    #planesLayer, #cursorsLayer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 15;
+    }
+
+    .paper-plane-entity {
+      position: absolute;
+      pointer-events: auto;
+      cursor: pointer;
+      transform-origin: center center;
+      filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.55));
+      transition: filter 0.2s ease;
+    }
+
+    .paper-plane-entity:hover {
+      filter: drop-shadow(0 0 14px rgba(251, 191, 36, 0.85));
+    }
+
+    /* 访客光标平滑过渡 */
+    .visitor-cursor {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      transition: top 0.1s linear, left 0.1s linear;
+      will-change: transform, top, left;
+    }
+
+    /* 表情气泡弹出动画 */
+    @keyframes popBubble {
+      0% { transform: translate(-50%, 6px) scale(0.5); opacity: 0; }
+      15% { transform: translate(-50%, -6px) scale(1.1); opacity: 1; }
+      25% { transform: translate(-50%, -4px) scale(1); opacity: 1; }
+      85% { transform: translate(-50%, -8px) scale(1); opacity: 1; }
+      100% { transform: translate(-50%, -18px) scale(0.8); opacity: 0; }
+    }
+    .emoji-bubble {
+      animation: popBubble 3.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    }
+
+    /* 递咖啡/暖光全屏光晕特效 */
+    @keyframes warmWave {
+      0% { opacity: 0; transform: scale(0.95); }
+      30% { opacity: 1; transform: scale(1); }
+      100% { opacity: 0; transform: scale(1.05); }
+    }
+    .warm-overlay-active {
+      animation: warmWave 2.8s ease-out forwards;
+    }
+
+    /* 信纸纹理 */
+    .paper-cream { background: linear-gradient(145deg, #fef9ec 0%, #f5ebd6 100%); color: #3b3228; }
+    .paper-blue { background: linear-gradient(145deg, #eef6fc 0%, #dceaf7 100%); color: #243647; }
+    .paper-sakura { background: linear-gradient(145deg, #fdf0f3 0%, #f7dfe5 100%); color: #472831; }
+    .paper-kraft { background: linear-gradient(145deg, #e5d0b5 0%, #d2b693 100%); color: #362718; }
+
+    /* 折纸起飞收起动画 */
+    @keyframes foldAndLaunch {
+      0% { transform: scale(1) rotate(0deg); opacity: 1; }
+      50% { transform: scale(0.35) rotate(-12deg) translateY(-40px); opacity: 0.9; }
+      100% { transform: scale(0.05) rotate(25deg) translate(250px, -220px); opacity: 0; }
+    }
+    .folding-out {
+      animation: foldAndLaunch 0.65s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+
+    /* 允许输入框选择文字 */
+    textarea, input[type="text"] {
+      user-select: text;
+      -webkit-user-select: text;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 1. 深夜咖啡馆雨夜全屏 Canvas -->
+  <canvas id="sceneCanvas"></canvas>
+
+  <!-- 2. 暖光互动全屏氛围层 -->
+  <div id="warmAura" class="fixed inset-0 pointer-events-none z-10 opacity-0"
+       style="background: radial-gradient(circle at 50% 65%, rgba(251, 191, 36, 0.28) 0%, rgba(245, 158, 11, 0.1) 45%, transparent 75%);">
+  </div>
+
+  <!-- 3. 咖啡馆前景剪影与氛围装饰 (SVG 室内场景) -->
+  <div class="fixed inset-x-0 bottom-0 pointer-events-none z-10 flex flex-col justify-end">
+    <svg class="w-full h-44 sm:h-56 md:h-64" viewBox="0 0 1440 320" preserveAspectRatio="none">
+      <defs>
+        <!-- 台灯暖光辐射 -->
+        <radialGradient id="lampGlow" cx="50%" cy="40%" r="55%">
+          <stop offset="0%" stop-color="#fbbf24" stop-opacity="0.42" />
+          <stop offset="45%" stop-color="#d97706" stop-opacity="0.14" />
+          <stop offset="100%" stop-color="#0b0d14" stop-opacity="0" />
+        </radialGradient>
+        <!-- 桌面木纹暗色渐变 -->
+        <linearGradient id="tableGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#1b1512" />
+          <stop offset="15%" stop-color="#120e0c" />
+          <stop offset="100%" stop-color="#080707" />
+        </linearGradient>
+        <!-- 台灯灯罩渐变 -->
+        <linearGradient id="shadeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#f59e0b" />
+          <stop offset="100%" stop-color="#92400e" />
+        </linearGradient>
+      </defs>
+
+      <!-- 台灯暖光光晕 -->
+      <ellipse cx="230" cy="175" rx="260" ry="150" fill="url(#lampGlow)" />
+
+      <!-- 窗台边缘 -->
+      <rect x="0" y="232" width="1440" height="10" fill="#171413" />
+      <rect x="0" y="232" width="1440" height="2" fill="rgba(251, 191, 36, 0.18)" />
+
+      <!-- 咖啡馆深色木桌 -->
+      <path d="M0,242 L1440,242 L1440,320 L0,320 Z" fill="url(#tableGrad)" />
+
+      <!-- 左侧：暖黄小台灯 -->
+      <g transform="translate(175, 105)">
+        <!-- 灯座 -->
+        <ellipse cx="55" cy="136" rx="28" ry="6" fill="#29201b" />
+        <rect x="51" y="72" width="8" height="64" rx="3" fill="#382c25" />
+        <!-- 灯泡微光 -->
+        <circle cx="55" cy="70" r="10" fill="#fef3c7" opacity="0.9" />
+        <!-- 复古灯罩 -->
+        <path d="M25,22 L85,22 L102,68 L8,68 Z" fill="url(#shadeGrad)" />
+        <ellipse cx="55" cy="68" rx="47" ry="6" fill="#fde68a" opacity="0.45" />
+      </g>
+
+      <!-- 左侧偏中：冒着热气的陶瓷咖啡杯 -->
+      <g transform="translate(335, 192)">
+        <!-- 热气路径 -->
+        <path class="steam-path" d="M16,-6 Q10,-18 18,-28" stroke="rgba(255,255,255,0.45)" stroke-width="2" fill="none" stroke-linecap="round" />
+        <path class="steam-path" d="M26,-4 Q32,-16 24,-28" stroke="rgba(255,255,255,0.4)" stroke-width="2" fill="none" stroke-linecap="round" />
+        <path class="steam-path" d="M21,-8 Q17,-20 22,-32" stroke="rgba(255,255,255,0.35)" stroke-width="1.5" fill="none" stroke-linecap="round" />
+        <!-- 杯碟 -->
+        <ellipse cx="22" cy="48" rx="28" ry="5" fill="#2c2420" />
+        <!-- 杯把手 -->
+        <path d="M40,20 C52,20 52,38 40,38" stroke="#3f332d" stroke-width="4" fill="none" stroke-linecap="round" />
+        <!-- 杯身 -->
+        <path d="M4,14 L40,14 L36,44 C35,47 9,47 8,44 Z" fill="#3f332d" />
+        <ellipse cx="22" cy="14" rx="18" ry="3.5" fill="#57473f" />
+        <ellipse cx="22" cy="15" rx="15" ry="2.5" fill="#29170e" />
+      </g>
+
+      <!-- 右侧：绿植剪影与一本翻开的书 -->
+      <g transform="translate(1130, 198)">
+        <!-- 翻开的书本 -->
+        <path d="M0,40 Q30,32 60,40 Q90,32 120,40 L124,45 Q90,37 60,45 Q30,37 -4,45 Z" fill="#d6cbbd" opacity="0.75" />
+        <path d="M-4,45 Q30,37 60,45 Q90,37 124,45 L124,48 L-4,48 Z" fill="#4a392d" />
+      </g>
+      <g transform="translate(1280, 145)">
+        <!-- 小盆栽 -->
+        <path d="M18,62 L52,62 L46,96 L24,96 Z" fill="#3a2921" />
+        <path d="M35,62 C20,45 10,32 18,18 C28,28 33,44 35,62 Z" fill="#182b24" />
+        <path d="M35,62 C48,42 62,30 55,14 C44,24 38,42 35,62 Z" fill="#1f362d" />
+        <path d="M35,62 C33,40 35,20 36,6 C41,22 39,42 35,62 Z" fill="#264237" />
+      </g>
+    </svg>
+  </div>
+
+  <!-- 4. 漂流纸飞机交互层 -->
+  <div id="planesLayer"></div>
+
+  <!-- 5. 多人陪伴感游走光标层 -->
+  <div id="cursorsLayer"></div>
+
+  <!-- 6. 顶部 UI 栏：标题 + 迷你复古 Lo-Fi 电台 -->
+  <header class="fixed top-0 inset-x-0 z-30 p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pointer-events-none">
+    <!-- 左侧：咖啡馆招牌与状态 -->
+    <div class="glass-panel rounded-2xl px-4 py-3 pointer-events-auto flex items-center gap-3.5 max-w-full">
+      <div class="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-400/30 flex items-center justify-center text-amber-300 shrink-0 shadow-inner">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+        </svg>
+      </div>
+      <div class="min-w-0">
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm sm:text-base font-medium tracking-wide text-amber-100 truncate font-serif-sc">深夜雨夜漂流咖啡馆</h1>
+          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] bg-emerald-500/15 text-emerald-300 border border-emerald-400/25 shrink-0">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="onlineCount">5</span> 人同频
+          </span>
+        </div>
+        <p class="text-xs text-slate-400 truncate mt-0.5">点击任意处跳跃 · 点击空中纸飞机拆信</p>
+      </div>
+    </div>
+
+    <!-- 右侧：复古 Lo-Fi & 雨声白噪音电台 -->
+    <div class="glass-panel rounded-2xl px-4 py-3 pointer-events-auto w-full sm:w-80 transition-all">
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <!-- 播放/暂停按钮 -->
+          <button id="audioToggleBtn" title="开启/暂停电台与雨声"
+                  class="w-9 h-9 rounded-xl bg-amber-400/20 hover:bg-amber-400/30 active:scale-95 border border-amber-300/30 flex items-center justify-center text-amber-300 transition shrink-0 cursor-pointer">
+            <svg id="playIcon" class="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+            <svg id="pauseIcon" class="w-4 h-4 hidden" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+            </svg>
+          </button>
+
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5">
+              <span class="text-[11px] uppercase tracking-wider text-amber-400/90 font-semibold">FM 104.2</span>
+              <!-- 频谱跳动条 -->
+              <div id="eqVisualizer" class="flex items-end gap-0.5 h-3.5 pb-0.5">
+                <span class="eq-bar w-0.5 h-1 bg-amber-300 rounded-full"></span>
+                <span class="eq-bar w-0.5 h-1 bg-amber-300 rounded-full"></span>
+                <span class="eq-bar w-0.5 h-1 bg-amber-300 rounded-full"></span>
+                <span class="eq-bar w-0.5 h-1 bg-amber-300 rounded-full"></span>
+              </div>
+            </div>
+            <div id="trackTitle" class="text-xs text-slate-200 font-medium truncate">雨夜爵士 · Fmaj7 漂流</div>
+          </div>
+        </div>
+
+        <!-- 切换频道按钮 -->
+        <button id="nextChannelBtn" title="切换电台频道"
+                class="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 active:scale-95 border border-white/10 text-[11px] text-slate-300 transition shrink-0 cursor-pointer">
+          切台 ↻
+        </button>
+      </div>
+
+      <!-- 独立音量滑块：音乐 & 雨声 -->
+      <div class="mt-2.5 pt-2.5 border-t border-white/10 grid grid-cols-2 gap-3 text-[11px] text-slate-400">
+        <div class="flex items-center gap-1.5">
+          <span title="Lo-Fi 钢琴音量">🎹</span>
+          <input id="musicVolSlider" type="range" min="0" max="1" step="0.02" value="0.55" class="w-full" />
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span title="窗外雨声音量">🌧️</span>
+          <input id="rainVolSlider" type="range" min="0" max="1" step="0.02" value="0.6" class="w-full" />
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 7. 全局轻提示 Toast -->
+  <div id="toastContainer" class="fixed top-28 sm:top-24 left-1/2 -translate-x-1/2 z-40 pointer-events-none flex flex-col items-center gap-2"></div>
+
+  <!-- 8. 底部悬浮极简互动栏 -->
+  <footer class="fixed bottom-4 sm:bottom-6 inset-x-0 z-30 px-4 flex justify-center pointer-events-none">
+    <div class="glass-panel rounded-full px-3 py-2 sm:px-4 sm:py-2.5 pointer-events-auto flex items-center gap-1.5 sm:gap-2.5 shadow-2xl max-w-full overflow-x-auto">
+      <!-- 表情气泡快捷按钮 -->
+      <div class="flex items-center gap-1 sm:gap-1.5">
+        <button data-emoji="☕" class="emoji-btn w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-white/10 active:scale-90 flex items-center justify-center text-base sm:text-lg transition cursor-pointer" title="举起热咖啡">☕</button>
+        <button data-emoji="🎵" class="emoji-btn w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-white/10 active:scale-90 flex items-center justify-center text-base sm:text-lg transition cursor-pointer" title="沉浸音乐">🎵</button>
+        <button data-emoji="❤️" class="emoji-btn w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-white/10 active:scale-90 flex items-center justify-center text-base sm:text-lg transition cursor-pointer" title="温暖比心">❤️</button>
+        <button data-emoji="💤" class="emoji-btn w-9 h-9 sm:w-10 sm:h-10 rounded-full hover:bg-white/10 active:scale-90 flex items-center justify-center text-base sm:text-lg transition cursor-pointer" title="有点困了">💤</button>
+      </div>
+
+      <div class="w-px h-6 bg-white/15 mx-0.5"></div>
+
+      <!-- 添柴/递暖咖啡全屏特效按钮 -->
+      <button id="warmShareBtn"
+              class="px-3 py-2 rounded-full bg-amber-500/15 hover:bg-amber-500/25 active:scale-95 border border-amber-400/30 text-amber-200 text-xs sm:text-sm font-medium flex items-center gap-1.5 transition shrink-0 cursor-pointer">
+        <span>🕯️</span>
+        <span class="hidden sm:inline">添一盏暖光</span>
+        <span class="sm:hidden">暖光</span>
+      </button>
+
+      <!-- 核心玩法：折一架纸飞机 -->
+      <button id="openFoldModalBtn"
+              class="px-3.5 py-2 sm:px-4 sm:py-2 rounded-full bg-gradient-to-r from-amber-400 to-orange-400 hover:from-amber-300 hover:to-orange-300 active:scale-95 text-slate-950 text-xs sm:text-sm font-semibold flex items-center gap-1.5 shadow-lg shadow-amber-500/25 transition shrink-0 cursor-pointer">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+        </svg>
+        <span>折一架纸飞机</span>
+      </button>
+    </div>
+  </footer>
+
+  <!-- 9. 折纸飞机弹窗（写信放飞） -->
+  <div id="foldModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div id="foldCard" class="w-full max-w-md rounded-3xl p-6 shadow-2xl paper-cream transition-all duration-300 relative">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">✉️</span>
+          <h2 class="text-base font-semibold font-serif-sc">折一架深夜纸飞机</h2>
+        </div>
+        <button id="closeFoldModalBtn" class="w-8 h-8 rounded-full hover:bg-black/10 flex items-center justify-center text-current opacity-70 hover:opacity-100 transition cursor-pointer">✕</button>
+      </div>
+
+      <p class="text-xs opacity-75 mb-3">写下一句此刻的心情，它会飞过窗前的雨夜，被某位陌生人接住。</p>
+
+      <!-- 纸张颜色选择 -->
+      <div class="flex items-center gap-2.5 mb-3">
+        <span class="text-xs opacity-75">信纸：</span>
+        <button data-paper="cream" class="paper-choice w-6 h-6 rounded-full bg-[#f5ebd6] ring-2 ring-amber-600 shadow-sm cursor-pointer" title="暖黄信纸"></button>
+        <button data-paper="blue" class="paper-choice w-6 h-6 rounded-full bg-[#dceaf7] ring-1 ring-black/20 shadow-sm cursor-pointer" title="雨夜淡蓝"></button>
+        <button data-paper="sakura" class="paper-choice w-6 h-6 rounded-full bg-[#f7dfe5] ring-1 ring-black/20 shadow-sm cursor-pointer" title="樱粉信笺"></button>
+        <button data-paper="kraft" class="paper-choice w-6 h-6 rounded-full bg-[#d2b693] ring-1 ring-black/20 shadow-sm cursor-pointer" title="复古牛皮纸"></button>
+      </div>
+
+      <!-- 心情输入区 -->
+      <div class="relative">
+        <textarea id="planeMessageInput" rows="3" maxlength="60"
+                  placeholder="例如：窗外的雨声很温柔，希望今晚失眠的人都能做个好梦..."
+                  class="w-full rounded-2xl p-3.5 text-sm bg-black/5 border border-black/10 focus:outline-none focus:border-black/30 resize-none font-serif-sc placeholder:opacity-50"></textarea>
+        <div class="text-right text-[11px] opacity-60 mt-1">
+          <span id="charCount">0</span> / 60
+        </div>
+      </div>
+
+      <div class="mt-4 flex items-center justify-between gap-3">
+        <span class="text-xs opacity-70">署名：@路过的旅人 (你)</span>
+        <button id="launchPlaneBtn"
+                class="px-5 py-2.5 rounded-full bg-slate-900 hover:bg-slate-800 active:scale-95 text-amber-200 text-sm font-medium flex items-center gap-2 shadow-md transition cursor-pointer">
+          <span>折好并放飞</span>
+          <span>✈️</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 10. 接住纸飞机拆信弹窗（查看与回信） -->
+  <div id="readModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+    <div id="readCard" class="w-full max-w-md rounded-3xl p-6 shadow-2xl paper-cream transition-all duration-300 relative">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+          <span class="px-2.5 py-0.5 rounded-full text-[11px] bg-black/10 font-medium">接住了一架纸飞机</span>
+        </div>
+        <button id="closeReadModalBtn" class="w-8 h-8 rounded-full hover:bg-black/10 flex items-center justify-center opacity-70 hover:opacity-100 transition cursor-pointer">✕</button>
+      </div>
+
+      <!-- 纸飞机原信内容 -->
+      <div class="py-4 px-1 border-b border-black/10">
+        <p id="readPlaneText" class="text-base sm:text-lg leading-relaxed font-serif-sc font-medium"></p>
+        <div class="mt-3 flex items-center justify-between text-xs opacity-70">
+          <span id="readPlaneAuthor">来自 @夜猫子阿K</span>
+          <span id="readPlaneTime">刚刚掠过窗前</span>
+        </div>
+      </div>
+
+      <!-- 历史回信展示区（如果有） -->
+      <div id="existingRepliesBox" class="hidden mt-3 p-3 rounded-xl bg-black/5 text-xs space-y-1.5">
+        <div class="font-semibold opacity-75">信纸背面的字迹：</div>
+        <div id="existingRepliesList" class="space-y-1 opacity-85 font-serif-sc"></div>
+      </div>
+
+      <!-- 背面写一句回信 -->
+      <div class="mt-4">
+        <label class="block text-xs opacity-75 mb-1.5">在纸飞机背面写一句回信，让它继续漂流：</label>
+        <div class="flex gap-2">
+          <input id="replyInput" type="text" maxlength="45" placeholder="写点温暖的回应..."
+                 class="flex-1 rounded-xl px-3 py-2 text-xs bg-black/5 border border-black/10 focus:outline-none focus:border-black/30 font-serif-sc" />
+          <button id="likePlaneBtn"
+                  class="px-3 py-2 rounded-xl bg-black/5 hover:bg-black/10 active:scale-95 text-xs font-medium flex items-center gap-1 transition cursor-pointer" title="点个赞">
+            <span>❤️</span>
+            <span id="likeCountSpan">1</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-5 flex items-center justify-end gap-2.5">
+        <button id="relaunchPlaneBtn"
+                class="w-full py-2.5 rounded-full bg-slate-900 hover:bg-slate-800 active:scale-95 text-amber-200 text-sm font-medium flex items-center justify-center gap-2 shadow-md transition cursor-pointer">
+          <span>重新放飞这架纸飞机</span>
+          <span>🛫</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * ============================================================================
+     * 1. 原生 Web Audio API 实时音频合成引擎 (Lo-Fi 钢琴和弦 + 沙沙雨声 + 交互音效)
+     * ============================================================================
+     */
+    class CafeAudioEngine {
+      constructor() {
+        this.ctx = null;
+        this.isPlaying = false;
+        this.musicVolume = 0.55;
+        this.rainVolume = 0.6;
+        this.channelIndex = 0;
+        this.chordTimer = null;
+        this.step = 0;
+
+        // 三个电台频道定义
+        this.channels = [
+          {
+            name: '雨夜爵士 · Fmaj7 漂流',
+            tempoMs: 2800,
+            // Fmaj7 -> Em7 -> Dm7 -> Cmaj7
+            chords: [
+              [174.61, 220.00, 261.63, 329.63], // Fmaj7
+              [164.81, 196.00, 246.94, 293.66], // Em7
+              [146.83, 174.61, 220.00, 261.63], // Dm7
+              [130.81, 164.81, 196.00, 246.94]  // Cmaj7
+            ]
+          },
+          {
+            name: '深夜冥想 · 星空电台',
+            tempoMs: 3400,
+            // Am9 -> Fmaj7 -> Cmaj9 -> G6
+            chords: [
+              [220.00, 261.63, 329.63, 392.00, 493.88],
+              [174.61, 220.00, 261.63, 329.63],
+              [130.81, 196.00, 246.94, 293.66],
+              [196.00, 246.94, 293.66, 329.63]
+            ]
+          },
+          {
+            name: '纯享雨声 · 窗边白噪音',
+            tempoMs: 3000,
+            chords: [] // 仅播放雨声与壁炉底噪
+          }
+        ];
+      }
+
+      init() {
+        if (this.ctx) return;
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AudioCtx();
+
+        // 主总增益
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.value = 0.85;
+        this.masterGain.connect(this.ctx.destination);
+
+        // 雨声总线
+        this.rainGain = this.ctx.createGain();
+        this.rainGain.gain.value = 0;
+        this.rainGain.connect(this.masterGain);
+
+        // 音乐总线
+        this.musicGain = this.ctx.createGain();
+        this.musicGain.gain.value = this.musicVolume;
+        this.musicGain.connect(this.masterGain);
+
+        this._createRainNoiseNode();
+      }
+
+      // 生成逼真沙沙雨声（粉红噪声 + 双重低通/带通滤波）
+      _createRainNoiseNode() {
+        const bufferSize = this.ctx.sampleRate * 3;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const output = buffer.getChannelData(0);
+
+        // Paul Kellet 粉红噪声算法，听感极其柔和温暖
+        let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+        for (let i = 0; i < bufferSize; i++) {
+          const white = Math.random() * 2 - 1;
+          b0 = 0.99886 * b0 + white * 0.0555179;
+          b1 = 0.99332 * b1 + white * 0.0750759;
+          b2 = 0.96900 * b2 + white * 0.1538520;
+          b3 = 0.86650 * b3 + white * 0.3104856;
+          b4 = 0.55000 * b4 + white * 0.5329522;
+          b5 = -0.7616 * b5 - white * 0.0168980;
+          output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.04;
+          b6 = white * 0.115926;
+        }
+
+        const noiseSource = this.ctx.createBufferSource();
+        noiseSource.buffer = buffer;
+        noiseSource.loop = true;
+
+        // 隔着玻璃听雨的低通滤波器
+        const lowpass = this.ctx.createBiquadFilter();
+        lowpass.type = 'lowpass';
+        lowpass.frequency.value = 850;
+        lowpass.Q.value = 0.7;
+
+        noiseSource.connect(lowpass);
+        lowpass.connect(this.rainGain);
+        noiseSource.start();
+      }
+
+      // 弹奏一组温暖的 Lo-Fi 电钢琴和弦
+      _playChord(freqs, durationSec) {
+        if (!this.ctx || !this.isPlaying || freqs.length === 0) return;
+        const now = this.ctx.currentTime;
+
+        freqs.forEach((freq, idx) => {
+          // 轻微错开每个音符的触发时间，模拟真实手指琶音拨键
+          const startTime = now + idx * 0.055;
+
+          const osc = this.ctx.createOscillator();
+          const subOsc = this.ctx.createOscillator();
+          const filter = this.ctx.createBiquadFilter();
+          const noteGain = this.ctx.createGain();
+
+          // 温暖的三角波 + 正弦波叠加，带微弱黑胶音高漂移 (detune)
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, startTime);
+          osc.detune.value = (Math.random() - 0.5) * 8;
+
+          subOsc.type = 'sine';
+          subOsc.frequency.setValueAtTime(freq * 2, startTime); // 泛音
+
+          const subGain = this.ctx.createGain();
+          subGain.gain.value = 0.12;
+
+          // 低通滤波切除刺耳高频，营造 Lo-Fi 复古闷感
+          filter.type = 'lowpass';
+          filter.frequency.setValueAtTime(920, startTime);
+          filter.frequency.exponentialRampToValueAtTime(380, startTime + durationSec);
+
+          // 柔和的 ADSR 包络
+          noteGain.gain.setValueAtTime(0.0001, startTime);
+          noteGain.gain.linearRampToValueAtTime(0.11, startTime + 0.12);
+          noteGain.gain.exponentialRampToValueAtTime(0.0008, startTime + durationSec);
+
+          osc.connect(filter);
+          subOsc.connect(subGain);
+          subGain.connect(filter);
+          filter.connect(noteGain);
+          noteGain.connect(this.musicGain);
+
+          osc.start(startTime);
+          subOsc.start(startTime);
+          osc.stop(startTime + durationSec + 0.1);
+          subOsc.stop(startTime + durationSec + 0.1);
+        });
+      }
+
+      start() {
+        this.init();
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+        if (this.isPlaying) return;
+        this.isPlaying = true;
+
+        // 淡入雨声
+        const now = this.ctx.currentTime;
+        this.rainGain.gain.cancelScheduledValues(now);
+        this.rainGain.gain.setValueAtTime(this.rainGain.gain.value, now);
+        this.rainGain.gain.linearRampToValueAtTime(this.rainVolume, now + 1.2);
+
+        this._scheduleLoop();
+      }
+
+      stop() {
+        if (!this.ctx || !this.isPlaying) return;
+        this.isPlaying = false;
+        clearInterval(this.chordTimer);
+
+        const now = this.ctx.currentTime;
+        this.rainGain.gain.cancelScheduledValues(now);
+        this.rainGain.gain.setValueAtTime(this.rainGain.gain.value, now);
+        this.rainGain.gain.linearRampToValueAtTime(0.0001, now + 0.8);
+      }
+
+      _scheduleLoop() {
+        clearInterval(this.chordTimer);
+        const channel = this.channels[this.channelIndex];
+
+        const tick = () => {
+          if (!this.isPlaying) return;
+          if (channel.chords.length > 0) {
+            const chord = channel.chords[this.step % channel.chords.length];
+            this._playChord(chord, channel.tempoMs / 1000 * 1.15);
+            this.step++;
+          }
+        };
+
+        tick();
+        this.chordTimer = setInterval(tick, channel.tempoMs);
+      }
+
+      nextChannel() {
+        this.channelIndex = (this.channelIndex + 1) % this.channels.length;
+        this.step = 0;
+        if (this.isPlaying) {
+          this._scheduleLoop();
+        }
+        this.playSfx('switch');
+        return this.channels[this.channelIndex].name;
+      }
+
+      setMusicVolume(val) {
+        this.musicVolume = parseFloat(val);
+        if (this.musicGain && this.ctx) {
+          this.musicGain.gain.setTargetAtTime(this.musicVolume, this.ctx.currentTime, 0.08);
+        }
+      }
+
+      setRainVolume(val) {
+        this.rainVolume = parseFloat(val);
+        if (this.rainGain && this.ctx && this.isPlaying) {
+          this.rainGain.gain.setTargetAtTime(this.rainVolume, this.ctx.currentTime, 0.08);
+        }
+      }
+
+      // 清脆治愈的交互音效 (纸飞机放飞、接住、发送表情、跳跃)
+      playSfx(type) {
+        try {
+          this.init();
+          if (this.ctx.state === 'suspended') this.ctx.resume();
+          const now = this.ctx.currentTime;
+
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.connect(gain);
+          gain.connect(this.masterGain);
+
+          if (type === 'launch') {
+            // 纸飞机破风上扬清音
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(360, now);
+            osc.frequency.exponentialRampToValueAtTime(780, now + 0.28);
+            gain.gain.setValueAtTime(0.14, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+            osc.start(now);
+            osc.stop(now + 0.34);
+          } else if (type === 'catch') {
+            // 接住信件的双音风铃
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(587.33, now); // D5
+            osc.frequency.setValueAtTime(880.00, now + 0.09); // A5
+            gain.gain.setValueAtTime(0.15, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+            osc.start(now);
+            osc.stop(now + 0.46);
+          } else if (type === 'pop') {
+            // 表情气泡啵啵声
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(440, now);
+            osc.frequency.exponentialRampToValueAtTime(660, now + 0.09);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+            osc.start(now);
+            osc.stop(now + 0.13);
+          } else if (type === 'warm') {
+            // 暖光和弦共鸣
+            [261.63, 329.63, 392.00, 523.25].forEach((f, i) => {
+              const o = this.ctx.createOscillator();
+              const g = this.ctx.createGain();
+              o.type = 'sine';
+              o.frequency.setValueAtTime(f, now + i * 0.04);
+              g.gain.setValueAtTime(0.07, now + i * 0.04);
+              g.gain.exponentialRampToValueAtTime(0.0008, now + 1.4);
+              o.connect(g);
+              g.connect(this.masterGain);
+              o.start(now + i * 0.04);
+              o.stop(now + 1.45);
+            });
+          } else if (type === 'switch') {
+            // 复古旋钮咔哒声
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(300, now);
+            osc.frequency.exponentialRampToValueAtTime(140, now + 0.05);
+            gain.gain.setValueAtTime(0.12, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+            osc.start(now);
+            osc.stop(now + 0.07);
+          }
+        } catch (e) {
+          // 忽略自动播放限制前的异常
+        }
+      }
+    }
+
+    const audioEngine = new CafeAudioEngine();
+
+    /**
+     * ============================================================================
+     * 2. 全屏 Canvas 深夜雨夜都市散景 (Bokeh) 与玻璃滑落雨滴渲染
+     * ============================================================================
+     */
+    const canvas = document.getElementById('sceneCanvas');
+    const ctx = canvas.getContext('2d');
+    let width = 0;
+    let height = 0;
+
+    let bokehLights = [];
+    let fallingRain = [];
+    let windowDrops = [];
+
+    function resizeCanvas() {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+      initWeatherAndBokeh();
+    }
+
+    function initWeatherAndBokeh() {
+      // 1. 窗外都市失焦霓虹光斑 (Bokeh)
+      const palette = [
+        'rgba(251, 191, 36, ',  // 暖琥珀路灯
+        'rgba(244, 114, 182, ', // 霓虹粉
+        'rgba(56, 189, 248, ',  // 都市冷蓝
+        'rgba(251, 146, 60, ',  // 温暖橘灯
+        'rgba(167, 139, 250, '  // 迷幻紫
+      ];
+      bokehLights = Array.from({ length: 28 }, () => ({
+        x: Math.random() * width,
+        y: height * 0.25 + Math.random() * height * 0.58,
+        r: 18 + Math.random() * 52,
+        color: palette[Math.floor(Math.random() * palette.length)],
+        alpha: 0.04 + Math.random() * 0.11,
+        pulseSpeed: 0.005 + Math.random() * 0.015,
+        phase: Math.random() * Math.PI * 2,
+        driftX: (Math.random() - 0.5) * 0.12
+      }));
+
+      // 2. 窗外斜落的细雨丝
+      fallingRain = Array.from({ length: 130 }, () => ({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        len: 14 + Math.random() * 22,
+        speedY: 9 + Math.random() * 7,
+        speedX: -1.8 - Math.random() * 1.2,
+        opacity: 0.12 + Math.random() * 0.22
+      }));
+
+      // 3. 贴在玻璃窗上蜿蜒滑落的水珠
+      windowDrops = Array.from({ length: 36 }, () => ({
+        x: Math.random() * width,
+        y: Math.random() * height * 0.85,
+        r: 1.5 + Math.random() * 2.6,
+        vy: 0.15 + Math.random() * 0.55,
+        wobble: Math.random() * Math.PI * 2,
+        trail: []
+      }));
+    }
+
+    function renderScene() {
+      // 深邃雨夜渐变背景
+      const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
+      skyGrad.addColorStop(0, '#070911');
+      skyGrad.addColorStop(0.55, '#0e1322');
+      skyGrad.addColorStop(1, '#18141a');
+      ctx.fillStyle = skyGrad;
+      ctx.fillRect(0, 0, width, height);
+
+      // 远景城市建筑剪影
+      ctx.fillStyle = '#090b12';
+      const buildingWidths = [90, 130, 80, 160, 110, 140, 95, 150, 120, 100];
+      let bx = -20;
+      let idx = 0;
+      while (bx < width + 100) {
+        const bw = buildingWidths[idx % buildingWidths.length];
+        const bh = height * (0.28 + ((idx * 37) % 25) / 100);
+        ctx.fillRect(bx, height - bh - 60, bw - 6, bh);
+        bx += bw;
+        idx++;
+      }
+
+      // 绘制都市霓虹散景光斑
+      bokehLights.forEach(b => {
+        b.phase += b.pulseSpeed;
+        b.x += b.driftX;
+        if (b.x < -60) b.x = width + 60;
+        if (b.x > width + 60) b.x = -60;
+
+        const currentAlpha = b.alpha * (0.75 + 0.25 * Math.sin(b.phase));
+        const grad = ctx.createRadialGradient(b.x, b.y, b.r * 0.1, b.x, b.y, b.r);
+        grad.addColorStop(0, `${b.color}${currentAlpha * 1.3})`);
+        grad.addColorStop(0.7, `${b.color}${currentAlpha * 0.6})`);
+        grad.addColorStop(1, `${b.color}0)`);
+
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // 绘制窗外斜落的雨丝
+      ctx.lineWidth = 1;
+      fallingRain.forEach(r => {
+        r.x += r.speedX;
+        r.y += r.speedY;
+        if (r.y > height) {
+          r.y = -20;
+          r.x = Math.random() * (width + 100);
+        }
+        if (r.x < -50) r.x = width + 20;
+
+        ctx.strokeStyle = `rgba(186, 214, 247, ${r.opacity})`;
+        ctx.beginPath();
+        ctx.moveTo(r.x, r.y);
+        ctx.lineTo(r.x + r.speedX * 1.4, r.y + r.len);
+        ctx.stroke();
+      });
+
+      // 绘制落地玻璃窗格线 (极具咖啡馆落地窗氛围)
+      ctx.strokeStyle = 'rgba(15, 17, 24, 0.75)';
+      ctx.lineWidth = 10;
+      const col1 = width * 0.33;
+      const col2 = width * 0.67;
+      ctx.beginPath();
+      ctx.moveTo(col1, 0);
+      ctx.lineTo(col1, height);
+      ctx.moveTo(col2, 0);
+      ctx.lineTo(col2, height);
+      ctx.moveTo(0, height * 0.22);
+      ctx.lineTo(width, height * 0.22);
+      ctx.stroke();
+
+      // 窗框金属微弱反光
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(col1 + 5, 0);
+      ctx.lineTo(col1 + 5, height);
+      ctx.moveTo(col2 + 5, 0);
+      ctx.lineTo(col2 + 5, height);
+      ctx.stroke();
+
+      // 绘制玻璃表面滑落的小水珠与水痕
+      windowDrops.forEach(d => {
+        d.wobble += 0.05;
+        // 间歇性停顿与加速下滑
+        const slide = Math.sin(d.wobble) > -0.3 ? d.vy : d.vy * 0.15;
+        d.y += slide;
+        d.x += Math.sin(d.wobble * 1.7) * 0.18;
+
+        d.trail.push({ x: d.x, y: d.y });
+        if (d.trail.length > 14) d.trail.shift();
+
+        if (d.y > height * 0.86) {
+          d.y = Math.random() * height * 0.2;
+          d.x = Math.random() * width;
+          d.trail = [];
+        }
+
+        // 水痕尾巴
+        if (d.trail.length > 2) {
+          ctx.strokeStyle = 'rgba(203, 225, 255, 0.12)';
+          ctx.lineWidth = d.r * 0.7;
+          ctx.beginPath();
+          ctx.moveTo(d.trail[0].x, d.trail[0].y);
+          for (let i = 1; i < d.trail.length; i++) {
+            ctx.lineTo(d.trail[i].x, d.trail[i].y);
+          }
+          ctx.stroke();
+        }
+
+        // 水珠本体高光
+        ctx.fillStyle = 'rgba(224, 242, 254, 0.35)';
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      requestAnimationFrame(renderScene);
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+    renderScene();
+
+    /**
+     * ============================================================================
+     * 3. 零压力空间社交：用户发光化身 + 模拟在线陌生访客游走与表情气泡
+     * ============================================================================
+     */
+    const cursorsLayer = document.getElementById('cursorsLayer');
+
+    // 可爱像素幽灵/小猫 SVG 工厂
+    function createAvatarSVG(color, type = 'ghost') {
+      if (type === 'cat') {
+        return `
+          <svg width="30" height="30" viewBox="0 0 32 32" fill="none">
+            <path d="M6 12L4 4L12 8H20L28 4L26 12C27.5 14.5 28 17.5 28 21C28 25.5 23 28 16 28C9 28 4 25.5 4 21C4 17.5 4.5 14.5 6 12Z" fill="${color}" fill-opacity="0.9"/>
+            <circle cx="11.5" cy="17.5" r="1.8" fill="#0f172a"/>
+            <circle cx="20.5" cy="17.5" r="1.8" fill="#0f172a"/>
+            <path d="M14.5 20.5Q16 22 17.5 20.5" stroke="#0f172a" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        `;
+      }
+      return `
+        <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+          <path d="M16 4C9.92487 4 5 8.92487 5 15V26.5C5 27.3 5.9 27.7 6.5 27.2L10.5 24L14.5 27.2C15.4 27.9 16.6 27.9 17.5 27.2L21.5 24L25.5 27.2C26.1 27.7 27 27.3 27 26.5V15C27 8.92487 22.0751 4 16 4Z" fill="${color}" fill-opacity="0.88"/>
+          <circle cx="12" cy="14.5" r="1.8" fill="#0f172a"/>
+          <circle cx="20" cy="14.5" r="1.8" fill="#0f172a"/>
+        </svg>
+      `;
+    }
+
+    // 创建用户自己的化身
+    const userState = {
+      x: window.innerWidth * 0.5,
+      y: window.innerHeight * 0.55,
+      el: null,
+      spriteEl: null,
+      isJumping: false
+    };
+
+    function initUserAvatar() {
+      const div = document.createElement('div');
+      div.className = 'visitor-cursor z-20';
+      div.style.left = `${userState.x}px`;
+      div.style.top = `${userState.y}px`;
+      div.innerHTML = `
+        <div class="relative flex flex-col items-center">
+          <div id="userSprite" class="transition-transform duration-200 drop-shadow-[0_0_12px_rgba(251,191,36,0.75)]">
+            ${createAvatarSVG('#fde68a', 'cat')}
+          </div>
+          <span class="mt-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-400/20 text-amber-200 border border-amber-300/30 whitespace-nowrap backdrop-blur-sm">
+            @你 (旅人)
+          </span>
+        </div>
+      `;
+      cursorsLayer.appendChild(div);
+      userState.el = div;
+      userState.spriteEl = div.querySelector('#userSprite');
+    }
+    initUserAvatar();
+
+    // 跟随鼠标/触摸平滑移动用户化身
+    window.addEventListener('pointermove', (e) => {
+      userState.x = e.clientX;
+      userState.y = e.clientY;
+      userState.el.style.left = `${userState.x}px`;
+      userState.el.style.top = `${userState.y}px`;
+    });
+
+    // 点击背景空白处让自己的化身欢快跳一下
+    document.addEventListener('pointerdown', (e) => {
+      // 如果点击的是按钮、输入框、弹窗或纸飞机，则不触发背景跳跃
+      if (e.target.closest('button, input, textarea, .paper-plane-entity, #foldCard, #readCard')) return;
+
+      userState.x = e.clientX;
+      userState.y = e.clientY;
+      userState.el.style.left = `${userState.x}px`;
+      userState.el.style.top = `${userState.y}px`;
+
+      if (!userState.isJumping) {
+        userState.isJumping = true;
+        userState.spriteEl.style.transform = 'translateY(-18px) scale(1.15)';
+        audioEngine.playSfx('pop');
+        setTimeout(() => {
+          userState.spriteEl.style.transform = 'translateY(0) scale(1)';
+          userState.isJumping = false;
+        }, 240);
+      }
+    });
+
+    // 在化身头顶冒出表情气泡
+    function spawnEmojiBubble(targetEl, emoji) {
+      const bubble = document.createElement('div');
+      bubble.className = 'emoji-bubble absolute -top-9 left-1/2 px-2.5 py-1 rounded-full glass-panel text-sm shadow-lg pointer-events-none';
+      bubble.textContent = emoji;
+      targetEl.appendChild(bubble);
+      setTimeout(() => bubble.remove(), 3200);
+    }
+
+    // 模拟 4 位在线陌生访客
+    const simulatedVisitors = [
+      { name: '@夜猫子阿K', color: '#93c5fd', type: 'ghost', x: 0.24, y: 0.42 },
+      { name: '@失眠的宇航员', color: '#f9a8d4', type: 'cat', x: 0.72, y: 0.36 },
+      { name: '@凌晨两点半', color: '#6ee7b7', type: 'ghost', x: 0.65, y: 0.62 },
+      { name: '@雨中漫步', color: '#c4b5fd', type: 'cat', x: 0.34, y: 0.64 }
+    ];
+
+    const visitorEntities = simulatedVisitors.map(v => {
+      const px = window.innerWidth * v.x;
+      const py = window.innerHeight * v.y;
+      const el = document.createElement('div');
+      el.className = 'visitor-cursor';
+      el.style.left = `${px}px`;
+      el.style.top = `${py}px`;
+      el.innerHTML = `
+        <div class="relative flex flex-col items-center opacity-85">
+          <div class="drop-shadow-[0_0_10px_rgba(255,255,255,0.25)]">
+            ${createAvatarSVG(v.color, v.type)}
+          </div>
+          <span class="mt-1 px-2 py-0.5 rounded-full text-[10px] bg-slate-900/65 text-slate-300 border border-white/10 whitespace-nowrap">
+            ${v.name}
+          </span>
+        </div>
+      `;
+      cursorsLayer.appendChild(el);
+
+      return {
+        ...v,
+        el,
+        curX: px,
+        curY: py,
+        targetX: px,
+        targetY: py,
+        waitTimer: Math.random() * 120
+      };
+    });
+
+    // 访客缓慢游走与随机冒气泡循环
+    function updateVisitorsLoop() {
+      const emojis = ['☕', '🎵', '💤', '✨', '🌧️'];
+      visitorEntities.forEach(v => {
+        if (v.waitTimer > 0) {
+          v.waitTimer--;
+          // 偶尔在停驻看雨时冒出表情气泡
+          if (Math.random() < 0.0022) {
+            const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+            spawnEmojiBubble(v.el, randomEmoji);
+          }
+        } else {
+          const dx = v.targetX - v.curX;
+          const dy = v.targetY - v.curY;
+          const dist = Math.hypot(dx, dy);
+
+          if (dist < 8) {
+            // 到达目标点，停下来看一会儿雨
+            v.waitTimer = 140 + Math.random() * 240;
+            v.targetX = window.innerWidth * (0.15 + Math.random() * 0.7);
+            v.targetY = window.innerHeight * (0.24 + Math.random() * 0.45);
+          } else {
+            v.curX += dx * 0.012;
+            v.curY += dy * 0.012;
+            v.el.style.left = `${v.curX}px`;
+            v.el.style.top = `${v.curY}px`;
+          }
+        }
+      });
+      requestAnimationFrame(updateVisitorsLoop);
+    }
+    updateVisitorsLoop();
+
+    /**
+     * ============================================================================
+     * 4. 核心玩法：折纸飞机、优美贝塞尔滑翔轨迹、拖尾光效与接住回信
+     * ============================================================================
+     */
+    const planesLayer = document.getElementById('planesLayer');
+
+    // 预置的治愈系陌生人漂流信件库
+    const strangerNotesPool = [
+      {
+        author: '@夜猫子阿K',
+        text: '刚加完班回到家，泡了一杯热可可。窗外的雨声让人突然觉得，慢一点也没关系。',
+        paper: 'cream',
+        likes: 4,
+        replies: ['辛苦啦，今晚好好睡一觉！ —— @凌晨两点半']
+      },
+      {
+        author: '@失眠的宇航员',
+        text: '如果此刻地球的另一端也有人没睡，那我们算不算正在共享同一片夜空？',
+        paper: 'blue',
+        likes: 7,
+        replies: []
+      },
+      {
+        author: '@凌晨两点半',
+        text: '这首 Fmaj7 的钢琴和弦太温柔了，把今天所有的焦虑都融化在咖啡里了。',
+        paper: 'kraft',
+        likes: 5,
+        replies: ['同感，循环听了半小时了 🎵 —— @雨中漫步']
+      },
+      {
+        author: '@雨中漫步',
+        text: '希望接住这架纸飞机的你，明天出门刚好遇到晴天，或者刚好带了伞。',
+        paper: 'sakura',
+        likes: 9,
+        replies: []
+      },
+      {
+        author: '@电台守夜人',
+        text: '深夜里所有的心事都可以折成纸飞机扔掉，天亮之前它们都会变成星星。',
+        paper: 'cream',
+        likes: 6,
+        replies: []
+      }
+    ];
+
+    const paperColorHex = {
+      cream: '#fef3c7',
+      blue: '#bae6fd',
+      sakura: '#fbcfe8',
+      kraft: '#e7cba9'
+    };
+
+    let activePlanes = [];
+    let currentOpenedPlane = null;
+
+    // 贝塞尔曲线求值函数
+    function cubicBezier(t, p0, p1, p2, p3) {
+      const u = 1 - t;
+      const tt = t * t;
+      const uu = u * u;
+      const uuu = uu * u;
+      const ttt = tt * t;
+      return {
+        x: uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x,
+        y: uuu * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + ttt * p3.y
+      };
+    }
+
+    // 生成一架在夜空中滑翔的纸飞机
+    function spawnPaperPlane(noteData, isUserLaunched = false) {
+      const fromLeft = isUserLaunched ? true : Math.random() > 0.5;
+      const startY = isUserLaunched ? window.innerHeight * 0.72 : window.innerHeight * (0.22 + Math.random() * 0.42);
+      const endY = window.innerHeight * (0.18 + Math.random() * 0.45);
+
+      const p0 = isUserLaunched
+        ? { x: window.innerWidth * 0.5, y: window.innerHeight * 0.78 }
+        : { x: fromLeft ? -50 : window.innerWidth + 50, y: startY };
+
+      const p3 = {
+        x: fromLeft ? window.innerWidth + 70 : -70,
+        y: endY
+      };
+
+      const p1 = {
+        x: p0.x + (p3.x - p0.x) * 0.33,
+        y: Math.min(p0.y, p3.y) - (90 + Math.random() * 110)
+      };
+
+      const p2 = {
+        x: p0.x + (p3.x - p0.x) * 0.68,
+        y: Math.max(p0.y, p3.y) + (40 + Math.random() * 80)
+      };
+
+      const fillHex = paperColorHex[noteData.paper] || '#fef3c7';
+      const el = document.createElement('div');
+      el.className = 'paper-plane-entity group';
+      el.title = '点击接住这架纸飞机';
+
+      el.innerHTML = `
+        <div class="relative flex items-center justify-center p-2">
+          <!-- 微弱光晕提示可点击 -->
+          <div class="absolute inset-0 rounded-full bg-amber-300/20 blur-md group-hover:bg-amber-300/45 transition"></div>
+          <svg width="38" height="38" viewBox="0 0 36 36" fill="none">
+            <path d="M32 4L3 16.5L13.5 21L27 9.5L16.5 22.5L21 32L32 4Z" fill="${fillHex}" stroke="rgba(15,23,42,0.35)" stroke-width="1.2" stroke-linejoin="round"/>
+            <path d="M13.5 21L16.5 28L18.5 23.5" fill="rgba(0,0,0,0.18)"/>
+          </svg>
+          <span class="absolute -bottom-4 px-1.5 py-0.5 rounded text-[9px] bg-black/55 text-amber-200/90 opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
+            点击拆信
+          </span>
+        </div>
+      `;
+
+      planesLayer.appendChild(el);
+
+      const planeObj = {
+        id: Date.now() + Math.random(),
+        el,
+        noteData,
+        p0, p1, p2, p3,
+        t: 0,
+        speed: isUserLaunched ? 0.0014 : 0.00105, // 优雅缓慢的滑翔速度，方便用户点击接住
+        prevPos: { ...p0 },
+        trailTick: 0
+      };
+
+      el.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        catchPaperPlane(planeObj);
+      });
+
+      activePlanes.push(planeObj);
+    }
+
+    // 纸飞机拖尾光点粒子
+    function spawnTrailSparkle(x, y, color) {
+      const dot = document.createElement('div');
+      dot.className = 'fixed rounded-full pointer-events-none';
+      dot.style.left = `${x}px`;
+      dot.style.top = `${y}px`;
+      dot.style.width = '4px';
+      dot.style.height = '4px';
+      dot.style.backgroundColor = color;
+      dot.style.boxShadow = `0 0 8px ${color}`;
+      dot.style.opacity = '0.75';
+      dot.style.transition = 'opacity 0.9s ease-out, transform 0.9s ease-out';
+      planesLayer.appendChild(dot);
+
+      requestAnimationFrame(() => {
+        dot.style.opacity = '0';
+        dot.style.transform = 'scale(0.2)';
+      });
+      setTimeout(() => dot.remove(), 920);
+    }
+
+    // 更新所有飞行中的纸飞机位置与朝向
+    function updatePlanesLoop() {
+      for (let i = activePlanes.length - 1; i >= 0; i--) {
+        const p = activePlanes[i];
+        p.t += p.speed;
+
+        if (p.t >= 1) {
+          p.el.remove();
+          activePlanes.splice(i, 1);
+          continue;
+        }
+
+        const pos = cubicBezier(p.t, p.p0, p.p1, p.p2, p.p3);
+        const angleRad = Math.atan2(pos.y - p.prevPos.y, pos.x - p.prevPos.x);
+        // SVG 纸飞机默认机头指向右上约 -45deg，加上 45deg 修正朝向
+        const angleDeg = (angleRad * 180 / Math.PI) + 45;
+
+        p.el.style.left = `${pos.x - 19}px`;
+        p.el.style.top = `${pos.y - 19}px`;
+        p.el.style.transform = `rotate(${angleDeg}deg)`;
+
+        p.trailTick++;
+        if (p.trailTick % 4 === 0) {
+          spawnTrailSparkle(pos.x, pos.y, paperColorHex[p.noteData.paper] || '#fde68a');
+        }
+
+        p.prevPos = pos;
+      }
+      requestAnimationFrame(updatePlanesLoop);
+    }
+    updatePlanesLoop();
+
+    // 定时自动飞来陌生人的纸飞机
+    setTimeout(() => {
+      const firstNote = strangerNotesPool[0];
+      spawnPaperPlane({ ...firstNote, replies: [...firstNote.replies] }, false);
+    }, 2800);
+
+    setInterval(() => {
+      if (activePlanes.length < 3) {
+        const template = strangerNotesPool[Math.floor(Math.random() * strangerNotesPool.length)];
+        spawnPaperPlane({ ...template, replies: [...template.replies] }, false);
+      }
+    }, 11500);
+
+    /**
+     * ============================================================================
+     * 5. UI 交互绑定：折纸弹窗、接信弹窗、电台控制、全局提示
+     * ============================================================================
+     */
+    const toastContainer = document.getElementById('toastContainer');
+    function showToast(msg) {
+      const el = document.createElement('div');
+      el.className = 'glass-panel px-4 py-2 rounded-full text-xs text-amber-100 shadow-lg transition-all duration-300 opacity-0 -translate-y-2';
+      el.textContent = msg;
+      toastContainer.appendChild(el);
+      requestAnimationFrame(() => {
+        el.classList.remove('opacity-0', '-translate-y-2');
+      });
+      setTimeout(() => {
+        el.classList.add('opacity-0', '-translate-y-2');
+        setTimeout(() => el.remove(), 300);
+      }, 2800);
+    }
+
+    // 电台控制绑定
+    const audioToggleBtn = document.getElementById('audioToggleBtn');
+    const playIcon = document.getElementById('playIcon');
+    const pauseIcon = document.getElementById('pauseIcon');
+    const eqVisualizer = document.getElementById('eqVisualizer');
+    const trackTitle = document.getElementById('trackTitle');
+    const nextChannelBtn = document.getElementById('nextChannelBtn');
+    const musicVolSlider = document.getElementById('musicVolSlider');
+    const rainVolSlider = document.getElementById('rainVolSlider');
+
+    audioToggleBtn.addEventListener('click', () => {
+      if (!audioEngine.isPlaying) {
+        audioEngine.start();
+        playIcon.classList.add('hidden');
+        pauseIcon.classList.remove('hidden');
+        eqVisualizer.classList.add('eq-playing');
+        showToast('🎧 已开启深夜雨声与 Lo-Fi 电台');
+      } else {
+        audioEngine.stop();
+        playIcon.classList.remove('hidden');
+        pauseIcon.classList.add('hidden');
+        eqVisualizer.classList.remove('eq-playing');
+        showToast('🔇 已暂停电台声音');
+      }
+    });
+
+    nextChannelBtn.addEventListener('click', () => {
+      const newName = audioEngine.nextChannel();
+      trackTitle.textContent = newName;
+      if (!audioEngine.isPlaying) {
+        audioToggleBtn.click();
+      } else {
+        showToast(`📻 已切换频道：${newName}`);
+      }
+    });
+
+    musicVolSlider.addEventListener('input', (e) => audioEngine.setMusicVolume(e.target.value));
+    rainVolSlider.addEventListener('input', (e) => audioEngine.setRainVolume(e.target.value));
+
+    // 底部表情气泡按钮
+    document.querySelectorAll('.emoji-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const emoji = btn.dataset.emoji;
+        spawnEmojiBubble(userState.el, emoji);
+        audioEngine.playSfx('pop');
+
+        // 偶尔触发附近访客的可爱回应
+        setTimeout(() => {
+          const luckyVisitor = visitorEntities[Math.floor(Math.random() * visitorEntities.length)];
+          spawnEmojiBubble(luckyVisitor.el, emoji);
+        }, 900 + Math.random() * 800);
+      });
+    });
+
+    // 全屏暖光氛围特效
+    const warmShareBtn = document.getElementById('warmShareBtn');
+    const warmAura = document.getElementById('warmAura');
+    warmShareBtn.addEventListener('click', () => {
+      warmAura.classList.remove('warm-overlay-active');
+      void warmAura.offsetWidth; // 强制重绘重启动画
+      warmAura.classList.add('warm-overlay-active');
+      audioEngine.playSfx('warm');
+      spawnEmojiBubble(userState.el, '🕯️');
+      showToast('✨ 你为咖啡馆添了一盏暖光，同频的访客都感受到了温暖');
+    });
+
+    // 折纸飞机弹窗交互
+    const foldModal = document.getElementById('foldModal');
+    const foldCard = document.getElementById('foldCard');
+    const openFoldModalBtn = document.getElementById('openFoldModalBtn');
+    const closeFoldModalBtn = document.getElementById('closeFoldModalBtn');
+    const planeMessageInput = document.getElementById('planeMessageInput');
+    const charCount = document.getElementById('charCount');
+    const launchPlaneBtn = document.getElementById('launchPlaneBtn');
+    let selectedPaper = 'cream';
+
+    openFoldModalBtn.addEventListener('click', () => {
+      foldCard.classList.remove('folding-out');
+      foldModal.classList.remove('hidden');
+      foldModal.classList.add('flex');
+      planeMessageInput.value = '';
+      charCount.textContent = '0';
+      setTimeout(() => planeMessageInput.focus(), 100);
+    });
+
+    function closeFoldModal() {
+      foldModal.classList.add('hidden');
+      foldModal.classList.remove('flex');
+    }
+    closeFoldModalBtn.addEventListener('click', closeFoldModal);
+
+    // 切换信纸颜色
+    document.querySelectorAll('.paper-choice').forEach(btn => {
+      btn.addEventListener('click', () => {
+        selectedPaper = btn.dataset.paper;
+        document.querySelectorAll('.paper-choice').forEach(b => b.classList.remove('ring-2', 'ring-amber-600'));
+        btn.classList.add('ring-2', 'ring-amber-600');
+        foldCard.className = `w-full max-w-md rounded-3xl p-6 shadow-2xl paper-${selectedPaper} transition-all duration-300 relative`;
+      });
+    });
+
+    planeMessageInput.addEventListener('input', () => {
+      charCount.textContent = planeMessageInput.value.length;
+    });
+
+    // 折好并放飞纸飞机
+    launchPlaneBtn.addEventListener('click', () => {
+      const content = planeMessageInput.value.trim();
+      if (!content) {
+        showToast('✍️ 先写下一句心情再放飞吧');
+        planeMessageInput.focus();
+        return;
+      }
+
+      audioEngine.playSfx('launch');
+      foldCard.classList.add('folding-out');
+
+      const newNote = {
+        author: '@你 (路过的旅人)',
+        text: content,
+        paper: selectedPaper,
+        likes: 1,
+        replies: []
+      };
+
+      // 存入池中以便后续也有机会再次飘回
+      strangerNotesPool.push(newNote);
+
+      setTimeout(() => {
+        closeFoldModal();
+        spawnPaperPlane(newNote, true);
+        showToast('✈️ 你的纸飞机已乘着夜风飞向窗外...');
+      }, 520);
+    });
+
+    // 接住纸飞机拆信交互
+    const readModal = document.getElementById('readModal');
+    const readCard = document.getElementById('readCard');
+    const closeReadModalBtn = document.getElementById('closeReadModalBtn');
+    const readPlaneText = document.getElementById('readPlaneText');
+    const readPlaneAuthor = document.getElementById('readPlaneAuthor');
+    const existingRepliesBox = document.getElementById('existingRepliesBox');
+    const existingRepliesList = document.getElementById('existingRepliesList');
+    const replyInput = document.getElementById('replyInput');
+    const likePlaneBtn = document.getElementById('likePlaneBtn');
+    const likeCountSpan = document.getElementById('likeCountSpan');
+    const relaunchPlaneBtn = document.getElementById('relaunchPlaneBtn');
+
+    function catchPaperPlane(planeObj) {
+      audioEngine.playSfx('catch');
+      currentOpenedPlane = planeObj.noteData;
+
+      // 从空中移除已接住的纸飞机
+      planeObj.el.remove();
+      activePlanes = activePlanes.filter(p => p.id !== planeObj.id);
+
+      // 填充信件内容
+      readCard.className = `w-full max-w-md rounded-3xl p-6 shadow-2xl paper-${currentOpenedPlane.paper || 'cream'} transition-all duration-300 relative`;
+      readPlaneText.textContent = `“${currentOpenedPlane.text}”`;
+      readPlaneAuthor.textContent = `来自 ${currentOpenedPlane.author}`;
+      likeCountSpan.textContent = currentOpenedPlane.likes || 1;
+      replyInput.value = '';
+
+      renderRepliesList();
+
+      readModal.classList.remove('hidden');
+      readModal.classList.add('flex');
+    }
+
+    function renderRepliesList() {
+      if (currentOpenedPlane && currentOpenedPlane.replies && currentOpenedPlane.replies.length > 0) {
+        existingRepliesBox.classList.remove('hidden');
+        existingRepliesList.innerHTML = currentOpenedPlane.replies
+          .map(r => `<div>• ${escapeHTML(r)}</div>`)
+          .join('');
+      } else {
+        existingRepliesBox.classList.add('hidden');
+      }
+    }
+
+    function escapeHTML(str) {
+      return str.replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[m]));
+    }
+
+    likePlaneBtn.addEventListener('click', () => {
+      if (!currentOpenedPlane) return;
+      currentOpenedPlane.likes = (currentOpenedPlane.likes || 1) + 1;
+      likeCountSpan.textContent = currentOpenedPlane.likes;
+      audioEngine.playSfx('pop');
+    });
+
+    // 写回信并重新放飞
+    relaunchPlaneBtn.addEventListener('click', () => {
+      if (!currentOpenedPlane) return;
+      const replyText = replyInput.value.trim();
+      if (replyText) {
+        currentOpenedPlane.replies.push(`${replyText} —— @你`);
+      }
+
+      audioEngine.playSfx('launch');
+      readModal.classList.add('hidden');
+      readModal.classList.remove('flex');
+
+      spawnPaperPlane({ ...currentOpenedPlane }, true);
+      showToast(replyText ? '💌 已写下回信并重新放飞纸飞机！' : '🛫 纸飞机带着你的祝福继续漂流了');
+    });
+
+    closeReadModalBtn.addEventListener('click', () => {
+      readModal.classList.add('hidden');
+      readModal.classList.remove('flex');
+    });
+
+    // 首次进入温馨提示（提示用户点击右上角开启声音）
+    setTimeout(() => {
+      showToast('💡 点击右上角电台播放键，开启雨夜爵士与窗外雨声');
+    }, 1200);
+  </script>
+</body>
+</html>

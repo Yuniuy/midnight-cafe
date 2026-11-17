@@ -1871,11 +1871,15 @@ Check your Browserslist config to be sure that your targets are set up correctly
 
   // 平滑跟随
   function tick() {
+    var mp = myPos();
     peers.forEach(function (p) {
       p.x += (p.tx - p.x) * 0.16;
       p.y += (p.ty - p.y) * 0.16;
-      p.el.style.left = p.x + 'px';
-      p.el.style.top = p.y + 'px';
+      // 跟"我"重叠时把对方的显示位置挪开一点，不然两个名牌会叠在一起
+      var ox = 0, oy = 0;
+      if (Math.abs(p.x - mp.x) < 50 && Math.abs(p.y - mp.y) < 50) { ox = 56; oy = -8; }
+      p.el.style.left = (p.x + ox) + 'px';
+      p.el.style.top = (p.y + oy) + 'px';
     });
     requestAnimationFrame(tick);
   }

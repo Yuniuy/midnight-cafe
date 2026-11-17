@@ -1,0 +1,21 @@
+# 调试用的一次性脚本与产物，不进版本库
+*.png
+*.err
+*.log
+cdp.mjs
+dbg.mjs
+act.mjs
+raw.mjs
+evalc.mjs
+targets.mjs
+shotonly.mjs
+shot.mjs
+serve.mjs
+mqtttest.mjs
+lobbytest.mjs
+pubtest.mjs
+push.mjs
+watch.mjs
+.eedge*
+.edge-cdp-profile/
+node_modules/
