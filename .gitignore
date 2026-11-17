@@ -20,3 +20,6 @@ watch.mjs
 .edge-cdp-profile/
 node_modules/
 dom.txt
+.edgefresh/
+boxwatch*.mjs
+boxpush.mjs

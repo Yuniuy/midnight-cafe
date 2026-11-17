@@ -1952,7 +1952,9 @@ Check your Browserslist config to be sure that your targets are set up correctly
   function publishRetained(topic, obj) {
     var payload = Array.prototype.slice.call(new TextEncoder().encode(JSON.stringify(obj)));
     var body = utf8(topic).concat(payload);
-    return sendRaw(new Uint8Array([0x31].concat(encLen(body.length), body)));
+    var ok = sendRaw(new Uint8Array([0x31].concat(encLen(body.length), body)));
+    DBG.lastPub = { topic: topic, len: body.length, ok: ok, at: Date.now() };
+    return ok;
   }
 
   function parseFrames() {
@@ -2028,7 +2030,13 @@ Check your Browserslist config to be sure that your targets are set up correctly
 
   function onMessage(m) {
     if (!m) return;
-    if (m.t === 'letter') { addLetter({ id: m.lid, a: m.a, text: m.text, ts: m.ts }); return; }
+    if (m.t === 'letter') {
+      pendingBox.delete(m.lid);
+      if (addLetter({ id: m.lid, a: m.a, text: m.text, ts: m.ts }) && m.a !== myName) {
+        toast('✉️ ' + (m.a || '有人') + ' 往信箱里投了一封信');
+      }
+      return;
+    }
     if (m.id === SID) return;
     var p = peers.get(m.id);
     if (m.t === 'hi') {
@@ -2093,6 +2101,7 @@ Check your Browserslist config to be sure that your targets are set up correctly
   var box = new Map();          // 信箱：lid -> {id, a, text, ts}
   var outbox = [];              // 没发出去的（断线时），重连补投
   var boxTimer = 0;
+  var pendingBox = new Map();   // lid -> {letter, tries, at}：等 broker 回声确认，没回声就重投
   var BOX_FILTER = TOPIC + '/box/+';
   var BOX_PREFIX = TOPIC + '/box/';
 
@@ -2134,7 +2143,14 @@ Check your Browserslist config to be sure that your targets are set up correctly
 
   function renderBox() {
     var badge = $('boxBadge'), cnt = $('boxCount'), listEl = $('boxList'), panel = $('boxPanel');
-    if (badge) { badge.textContent = box.size > 99 ? '99+' : String(box.size); badge.style.display = box.size ? 'flex' : 'none'; }
+    if (badge) {
+      var txt = box.size > 99 ? '99+' : String(box.size);
+      if (badge.textContent !== txt && badge.textContent !== '0' && txt !== '0' && badge.animate) {
+        try { badge.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.5)' }, { transform: 'scale(1)' }], { duration: 420, easing: 'ease-out' }); } catch (e) { }
+      }
+      badge.textContent = txt;
+      badge.style.display = box.size ? 'flex' : 'none';
+    }
     if (cnt) cnt.textContent = box.size ? ' · ' + box.size + ' 封' : '';
     if (!panel || panel.style.pointerEvents !== 'auto' || !listEl) return;
     var list = boxSorted();
@@ -2174,10 +2190,31 @@ Check your Browserslist config to be sure that your targets are set up correctly
     var lid = 'L' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
     var letter = { t: 'letter', lid: lid, a: myName, ts: Date.now(), text: text.slice(0, 300) };
     addLetter({ id: lid, a: myName, text: letter.text, ts: letter.ts });
-    if (!publishRetained(BOX_PREFIX + lid, letter)) outbox.push(letter);
+    deliver(letter);
     if (outbox.length > 40) outbox.shift();
     ta.value = '';
     toast('✉️ 投进信箱了，来过的人都看得到');
+  }
+
+  // 投递 + 回声确认：retained 消息发出去后 broker 会立刻回给我们一份，
+  // 3.5 秒没回声就重投（公共 broker 偶尔会漏掉 QoS0 的保留消息）
+  function deliver(letter) {
+    var ok = publishRetained(BOX_PREFIX + letter.lid, letter);
+    var rec = pendingBox.get(letter.lid);
+    if (!rec) { rec = { letter: letter, tries: 0 }; pendingBox.set(letter.lid, rec); }
+    rec.tries++;
+    rec.at = Date.now();
+    if (!ok && outbox.indexOf(letter) < 0) outbox.push(letter);
+    if (rec.tries > 3) { pendingBox.delete(letter.lid); }
+  }
+
+  function retryPending() {
+    var now = Date.now();
+    pendingBox.forEach(function (rec, lid) {
+      if (now - rec.at < 3500) return;
+      if (rec.tries >= 3) { pendingBox.delete(lid); return; }
+      deliver(rec.letter);
+    });
   }
 
   function flushOutbox() {
@@ -2245,6 +2282,8 @@ Check your Browserslist config to be sure that your targets are set up correctly
     last = p;
     publish({ t: 'p', id: SID, n: myName, p: norm(p) });
   }, 120);
+
+  setInterval(retryPending, 1200);
 
   // 添一盏暖光 → 别人也亮
   document.addEventListener('click', function (e) {
