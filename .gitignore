@@ -23,3 +23,6 @@ dom.txt
 .edgefresh/
 boxwatch*.mjs
 boxpush.mjs
+boxlib.mjs
+seed.mjs
+wipe.mjs
