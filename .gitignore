@@ -19,3 +19,4 @@ watch.mjs
 .eedge*
 .edge-cdp-profile/
 node_modules/
+dom.txt
