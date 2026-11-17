@@ -177,7 +177,7 @@
   /* ---------------------------------------------------------------- MQTT */
   var ws = null, buf = new Uint8Array(0), connected = false, pid = 1;
   var brokerIdx = 0, retry = 0, timers = [], intentionalClose = false, everConnected = false;
-  var DBG = (window.__net = { tx: 0, rx: 0, errs: [], build: 'v5-fix' });
+  var DBG = (window.__net = { tx: 0, rx: 0, errs: [], build: 'v7-box' });
   function note(where, e) {
     try { DBG.errs.push(where + ': ' + (e && e.message ? e.message : String(e))); if (DBG.errs.length > 12) DBG.errs.shift(); } catch (_) { }
   }
@@ -227,7 +227,7 @@
   }
 
   function subscribe() {
-    var body = [pid >> 8, pid & 255].concat(utf8(TOPIC), [0x00]);
+    var body = [pid >> 8, pid & 255].concat(utf8(TOPIC), [0x00], utf8(BOX_FILTER), [0x00]);
     pid = (pid + 1) & 0xffff;
     sendRaw(new Uint8Array([0x82].concat(encLen(body.length), body)));
   }
@@ -236,6 +236,13 @@
     var payload = Array.prototype.slice.call(new TextEncoder().encode(JSON.stringify(obj)));
     var body = utf8(TOPIC).concat(payload);
     return sendRaw(new Uint8Array([0x30].concat(encLen(body.length), body)));
+  }
+
+  // 保留消息：broker 帮你存着，后来的人一进房间就能收到（信箱靠它）
+  function publishRetained(topic, obj) {
+    var payload = Array.prototype.slice.call(new TextEncoder().encode(JSON.stringify(obj)));
+    var body = utf8(topic).concat(payload);
+    return sendRaw(new Uint8Array([0x31].concat(encLen(body.length), body)));
   }
 
   function parseFrames() {
@@ -267,6 +274,7 @@
         timers.push(setInterval(prune, 5000));
         hello();
         updateCount();
+        if (outbox.length) flushOutbox();
         if (!everConnected) {
           everConnected = true;
           toast('🌙 已接入雨夜频道 · 房间 ' + ROOM);
@@ -309,7 +317,9 @@
   }
 
   function onMessage(m) {
-    if (!m || m.id === SID) return;
+    if (!m) return;
+    if (m.t === 'letter') { addLetter({ id: m.lid, a: m.a, text: m.text, ts: m.ts }); return; }
+    if (m.id === SID) return;
     var p = peers.get(m.id);
     if (m.t === 'hi') {
       if (!p) {
@@ -367,6 +377,152 @@
     aura.classList.remove('warm-overlay-active');
     void aura.offsetWidth;
     aura.classList.add('warm-overlay-active');
+  }
+
+  /* ---------------------------------------------------------------- 墙上信箱 */
+  var box = new Map();          // 信箱：lid -> {id, a, text, ts}
+  var outbox = [];              // 没发出去的（断线时），重连补投
+  var boxTimer = 0;
+  var BOX_FILTER = TOPIC + '/box/+';
+  var BOX_PREFIX = TOPIC + '/box/';
+
+  function boxKey() { return 'mc_box_' + ROOM; }
+  function boxSorted() {
+    return Array.from(box.values()).sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
+  }
+  function saveBox() {
+    try { localStorage.setItem(boxKey(), JSON.stringify(boxSorted().slice(0, 200))); } catch (e) { }
+  }
+  function loadBox() {
+    try {
+      var raw = localStorage.getItem(boxKey());
+      if (raw) JSON.parse(raw).forEach(function (l) { if (l && l.id) box.set(l.id, l); });
+    } catch (e) { }
+  }
+  function addLetter(l) {
+    if (!l || !l.id || box.has(l.id)) return false;
+    box.set(l.id, {
+      id: String(l.id),
+      a: String(l.a || '@旅人').slice(0, 20),
+      text: String(l.text || '').slice(0, 300),
+      ts: +l.ts || Date.now()
+    });
+    saveBox();
+    if (boxTimer) return true;
+    boxTimer = setTimeout(function () { boxTimer = 0; renderBox(); }, 150);
+    return true;
+  }
+
+  function whenText(ts) {
+    var ago = Date.now() - ts;
+    if (!ts) return '';
+    if (ago < 60000) return '刚刚';
+    if (ago < 3600000) return Math.floor(ago / 60000) + ' 分钟前';
+    if (ago < 86400000) return Math.floor(ago / 3600000) + ' 小时前';
+    return new Date(ts).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+  }
+
+  function renderBox() {
+    var badge = $('boxBadge'), cnt = $('boxCount'), listEl = $('boxList'), panel = $('boxPanel');
+    if (badge) { badge.textContent = box.size > 99 ? '99+' : String(box.size); badge.style.display = box.size ? 'flex' : 'none'; }
+    if (cnt) cnt.textContent = box.size ? ' · ' + box.size + ' 封' : '';
+    if (!panel || panel.style.pointerEvents !== 'auto' || !listEl) return;
+    var list = boxSorted();
+    if (!list.length) {
+      listEl.innerHTML = '<div style="padding:34px 10px;text-align:center;color:#64748b;font-size:12px;line-height:1.9">信箱还是空的<br>写一句，留给今晚来过的人</div>';
+      return;
+    }
+    listEl.innerHTML = list.map(function (l) {
+      return '<div style="margin-bottom:8px;padding:9px 12px;border-radius:12px;background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.14)">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">' +
+        '<span style="font-size:11px;color:#bae6fd">' + escapeHTML(l.a) + '</span>' +
+        '<span style="font-size:10px;color:#64748b">' + whenText(l.ts) + '</span>' +
+        '</div>' +
+        '<div style="font-size:13px;line-height:1.65;color:#e2e8f0;white-space:pre-wrap;word-break:break-word">' + escapeHTML(l.text) + '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  function toggleBox(force) {
+    var panel = $('boxPanel');
+    if (!panel) return;
+    var open = typeof force === 'boolean' ? force : panel.style.pointerEvents !== 'auto';
+    panel.style.pointerEvents = open ? 'auto' : 'none';
+    panel.style.opacity = open ? '1' : '0';
+    panel.style.transform = open ? 'translateX(-50%) translateY(0)' : 'translateX(-50%) translateY(12px)';
+    if (open) {
+      renderBox();
+      var ta = $('boxInput');
+      if (ta) setTimeout(function () { try { ta.focus(); } catch (e) { } }, 220);
+    }
+  }
+
+  function sendLetter() {
+    var ta = $('boxInput');
+    var text = ta ? ta.value.trim() : '';
+    if (!text) return;
+    var lid = 'L' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    var letter = { t: 'letter', lid: lid, a: myName, ts: Date.now(), text: text.slice(0, 300) };
+    addLetter({ id: lid, a: myName, text: letter.text, ts: letter.ts });
+    if (!publishRetained(BOX_PREFIX + lid, letter)) outbox.push(letter);
+    if (outbox.length > 40) outbox.shift();
+    ta.value = '';
+    toast('✉️ 投进信箱了，来过的人都看得到');
+  }
+
+  function flushOutbox() {
+    for (var i = 0; i < outbox.length; i++) publishRetained(BOX_PREFIX + outbox[i].lid, outbox[i]);
+  }
+
+  function initBox() {
+    loadBox();
+    var btn = document.createElement('button');
+    btn.id = 'boxBtn';
+    btn.title = '墙上信箱';
+    btn.setAttribute('aria-label', '墙上信箱');
+    btn.style.cssText = 'position:fixed;right:16px;bottom:104px;z-index:44;width:50px;height:50px;border-radius:999px;' +
+      'display:flex;align-items:center;justify-content:center;font-size:19px;cursor:pointer;line-height:1;' +
+      'background:rgba(15,23,42,.74);border:1px solid rgba(251,191,36,.32);color:#fde68a;' +
+      'backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);box-shadow:0 10px 26px rgba(0,0,0,.45);';
+    btn.innerHTML = '✉<span id="boxBadge" style="position:absolute;top:-3px;right:-3px;min-width:18px;height:18px;padding:0 4px;' +
+      'border-radius:999px;background:#f59e0b;color:#1e293b;font-size:10px;font-weight:700;display:none;' +
+      'align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.4)">0</span>';
+    btn.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+    btn.addEventListener('click', function (e) { e.stopPropagation(); toggleBox(); });
+    document.body.appendChild(btn);
+
+    var panel = document.createElement('div');
+    panel.id = 'boxPanel';
+    panel.style.cssText = 'position:fixed;left:50%;bottom:96px;z-index:45;transform:translateX(-50%) translateY(12px);' +
+      'width:min(368px,calc(100vw - 28px));max-height:min(66vh,540px);display:flex;flex-direction:column;' +
+      'background:rgba(9,14,26,.94);border:1px solid rgba(148,163,184,.22);border-radius:18px;' +
+      'box-shadow:0 26px 64px rgba(0,0,0,.62);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);' +
+      'opacity:0;pointer-events:none;transition:opacity .22s ease,transform .22s ease;overflow:hidden;';
+    panel.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px 10px;border-bottom:1px solid rgba(148,163,184,.14)">' +
+      '<div style="font-size:13px;color:#fde68a;letter-spacing:.5px">墙上的信箱<span id="boxCount" style="color:#64748b;font-size:11px"></span></div>' +
+      '<button id="boxClose" aria-label="关闭" style="width:26px;height:26px;border-radius:8px;border:none;background:rgba(148,163,184,.12);color:#94a3b8;font-size:15px;line-height:1;cursor:pointer">×</button>' +
+      '</div>' +
+      '<div id="boxList" style="flex:1;overflow-y:auto;padding:10px 12px;-webkit-overflow-scrolling:touch"></div>' +
+      '<div style="padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid rgba(148,163,184,.14);background:rgba(15,23,42,.5)">' +
+      '<textarea id="boxInput" rows="2" maxlength="300" placeholder="写一句留在墙上…（最多 300 字）" ' +
+      'style="width:100%;resize:none;background:rgba(148,163,184,.08);border:1px solid rgba(148,163,184,.18);' +
+      'border-radius:10px;padding:8px 10px;color:#e2e8f0;font-size:12.5px;line-height:1.6;outline:none;font-family:inherit"></textarea>' +
+      '<div style="display:flex;justify-content:flex-end;margin-top:8px">' +
+      '<button id="boxSend" style="padding:7px 16px;border-radius:999px;border:1px solid rgba(251,191,36,.5);' +
+      'background:linear-gradient(180deg,#fbbf24,#f59e0b);color:#1e293b;font-size:12px;font-weight:600;cursor:pointer">投进信箱</button>' +
+      '</div></div>';
+    panel.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+    panel.addEventListener('click', function (e) { e.stopPropagation(); });
+    document.body.appendChild(panel);
+
+    $('boxClose').addEventListener('click', function () { toggleBox(false); });
+    $('boxSend').addEventListener('click', sendLetter);
+    $('boxInput').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendLetter(); }
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') toggleBox(false); });
+    renderBox();
   }
 
   /* ---------------------------------------------------------------- 本地事件钩子 */
@@ -429,9 +585,11 @@
 
   /* ---------------------------------------------------------------- 开跑 */
   if (!layer) return;
+  try { initBox(); } catch (e) { note('initBox', e); }
   requestAnimationFrame(tick);
   updateCount();
   connect();
 })();
+
 
 
